@@ -51,3 +51,14 @@ agent != ARC
 lineage != session
 continuity != identity
 inheritance != sameness
+```
+
+The governing principle is:
+
+> Continuity without requiring sameness.
+
+## Status
+
+Experimental. Zero Day.
+
+The architecture, Open WebUI integration points, and security boundaries are currently being defined. No working release is available yet.
