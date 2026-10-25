@@ -1,8 +1,8 @@
 """
 title: Open WebUI Agent Continuity Engine (ACE)
 author: Joseph Tingiris / Jun
-description: Session-scoped continuity tools for inspecting, locating, and reopening exact evidence from the current Open WebUI chat.
-version: 0.1.0
+description: Session-scoped continuity tools for locating and replaying exact evidence from the current Open WebUI chat.
+version: 0.2.0
 """
 
 from __future__ import annotations
@@ -15,14 +15,16 @@ from open_webui.models.users import Users
 from open_webui.utils.misc import get_message_list
 
 
+ACE_VERSION = "0.2.0"
+ACE_CONTRACT = "continuity-v1"
+ACE_CANARY = "trustworthy recall beats plausible reconstruction"
+
+
 class Tools:
     """Agent-facing continuity tools for the current Open WebUI chat."""
 
-    # ---------- private helpers: not exposed to the model ----------
-
     @staticmethod
     def _text(value: Any) -> str:
-        """Return a conservative text representation for stored message content."""
         if value is None:
             return ""
         if isinstance(value, str):
@@ -40,66 +42,58 @@ class Tools:
         return str(value)
 
     @staticmethod
-    def _excerpt(text: str, query: str = "", limit: int = 360) -> str:
-        """Create a bounded excerpt, centered near a query when possible."""
+    def _role(role: Optional[str]) -> str:
+        """Project storage roles into a compact conversational replay voice."""
+        return {
+            "user": "you",
+            "assistant": "me",
+            "system": "system",
+            "tool": "tool",
+        }.get(role or "", role or "unknown")
+
+    @staticmethod
+    def _excerpt(text: str, query: str = "", limit: int = 240) -> str:
         clean = re.sub(r"\s+", " ", text or "").strip()
         if len(clean) <= limit:
             return clean
-
         center = 0
         if query:
             match = re.search(re.escape(query), clean, flags=re.IGNORECASE)
             if match:
                 center = match.start()
-
         start = max(0, center - limit // 3)
         end = min(len(clean), start + limit)
         start = max(0, end - limit)
-        prefix = "..." if start else ""
-        suffix = "..." if end < len(clean) else ""
-        return f"{prefix}{clean[start:end]}{suffix}"
+        return f"{'...' if start else ''}{clean[start:end]}{'...' if end < len(clean) else ''}"
 
     @staticmethod
-    def _public_message(message: dict, *, query: str = "") -> dict:
-        """Return a small, provenance-bearing message representation."""
-        content = Tools._text(message.get("content"))
-        return {
-            "message_id": message.get("id"),
-            "parent_id": message.get("parentId"),
-            "role": message.get("role"),
-            "created_at": message.get("timestamp") or message.get("created_at"),
-            "excerpt": Tools._excerpt(content, query=query),
-        }
+    def _handle(position: int) -> str:
+        return f"@{position}"
+
+    @staticmethod
+    def _position_from_handle(handle: str) -> Optional[int]:
+        match = re.fullmatch(r"@?(\d+)", (handle or "").strip())
+        return int(match.group(1)) if match else None
 
     async def _load_current_chat(
         self,
         __chat_id__: Optional[str],
         __user__: Optional[dict],
     ) -> tuple[Any, dict[str, dict], list[dict]]:
-        """Load the invoking user's current chat through Open WebUI access control."""
         if not __chat_id__:
             raise ValueError("Open WebUI did not inject a current chat ID.")
-
         user_id = (__user__ or {}).get("id")
         if not user_id:
             raise ValueError("Open WebUI did not inject an authenticated user ID.")
-
         user = await Users.get_user_by_id(user_id)
         if user is None:
             raise PermissionError("The invoking Open WebUI user could not be resolved.")
-
-        chat = await Chats.get_accessible_chat_by_id(
-            __chat_id__, user, permission="read"
-        )
+        chat = await Chats.get_accessible_chat_by_id(__chat_id__, user, permission="read")
         if chat is None:
             raise PermissionError("The current chat is unavailable or not readable.")
-
         messages_map = await Chats.get_messages_map_by_chat_id(__chat_id__) or {}
         history = (chat.chat or {}).get("history") or {}
         current_id = history.get("currentId")
-
-        # Prefer the exact current branch. If currentId is unavailable, provide a
-        # deterministic fallback ordered by stored timestamps and IDs.
         chain = get_message_list(messages_map, current_id) if current_id else []
         if not chain:
             chain = sorted(
@@ -109,10 +103,36 @@ class Tools:
                     message.get("id") or "",
                 ),
             )
-
         return chat, messages_map, chain
 
-    # ---------- public ACE API: exposed to the model ----------
+    @staticmethod
+    def _resolve_coordinate(
+        coordinate: str,
+        messages_map: dict[str, dict],
+        chain: list[dict],
+    ) -> tuple[Optional[dict], Optional[int]]:
+        """Resolve a lightweight @position or durable UUID below deck."""
+        position = Tools._position_from_handle(coordinate)
+        if position is not None:
+            if 0 <= position < len(chain):
+                return chain[position], position
+            return None, None
+        message = messages_map.get((coordinate or "").strip())
+        if message is None:
+            return None, None
+        for index, item in enumerate(chain):
+            if item.get("id") == message.get("id"):
+                return message, index
+        return message, None
+
+    @staticmethod
+    def _replay(messages: list[dict]) -> str:
+        blocks: list[str] = []
+        for message in messages:
+            role = Tools._role(message.get("role"))
+            content = Tools._text(message.get("content")).strip()
+            blocks.append(f"{role}:\n{content}")
+        return "\n\n".join(blocks)
 
     async def ace_check_context(
         self,
@@ -124,27 +144,22 @@ class Tools:
         __model__: Optional[dict] = None,
     ) -> dict:
         """
-        Check your present continuity position and the safe structure Open WebUI
-        supplied to ACE. Use this diagnostic when validating ACE or comparing
-        active request context with persisted chat history.
+        Diagnose ACE's present continuity position and runtime contract. Use this
+        when validating installation, tool visibility, active context, or which
+        ACE generation is actually running. Continuity cue: trustworthy recall
+        beats plausible reconstruction.
         """
         metadata = __metadata__ or {}
-        user = __user__ or {}
-        model = __model__ or {}
-        messages = __messages__ or []
-
         return {
+            "ace_version": ACE_VERSION,
+            "semantic_contract": ACE_CONTRACT,
+            "semantic_canary": ACE_CANARY,
             "chat_id": __chat_id__,
             "message_id": __message_id__,
-            "visible_message_count": len(messages),
+            "visible_message_count": len(__messages__ or []),
             "metadata_keys": sorted(metadata.keys()),
-            "user_keys": sorted(user.keys()),
-            "model_keys": sorted(model.keys()),
-            "chat_model_id": (
-                metadata.get("model", {}).get("id")
-                if isinstance(metadata.get("model"), dict)
-                else metadata.get("model")
-            ),
+            "user_keys": sorted((__user__ or {}).keys()),
+            "model_keys": sorted((__model__ or {}).keys()),
         }
 
     async def ace_get_chat(
@@ -152,189 +167,117 @@ class Tools:
         __chat_id__: Optional[str] = None,
         __user__: Optional[dict] = None,
         __messages__: Optional[list] = None,
-    ) -> dict:
+    ) -> str:
         """
-        Get a compact structural account of your current persisted Open WebUI
-        chat. Use this to learn what durable history exists here and compare it
-        with the messages visible in the current request. This does not dump the
-        transcript.
+        Inspect continuity coverage for this current chat. Use ACE for this, not
+        web access or URL fetching. This reports how much persisted conversation
+        exists compared with active request context; it does not dump history.
+        Continuity cue: trustworthy recall beats plausible reconstruction.
         """
         try:
-            chat, messages_map, chain = await self._load_current_chat(
-                __chat_id__, __user__
+            _chat, messages_map, chain = await self._load_current_chat(__chat_id__, __user__)
+            fork_note = "yes" if len(messages_map) > len(chain) else "no"
+            return (
+                f"ACE {ACE_VERSION} | visible {len(__messages__ or [])} | "
+                f"current branch {len(chain)} | persisted {len(messages_map)} | "
+                f"forks {fork_note}"
             )
-            history = (chat.chat or {}).get("history") or {}
-            roles: dict[str, int] = {}
-            for message in chain:
-                role = message.get("role") or "unknown"
-                roles[role] = roles.get(role, 0) + 1
-
-            return {
-                "chat_id": chat.id,
-                "title": chat.title,
-                "owner_user_id": chat.user_id,
-                "created_at": chat.created_at,
-                "updated_at": chat.updated_at,
-                "current_message_id": history.get("currentId"),
-                "visible_message_count": len(__messages__ or []),
-                "persisted_message_count": len(messages_map),
-                "current_branch_message_count": len(chain),
-                "current_branch_roles": roles,
-                "has_forks": len(messages_map) > len(chain),
-            }
         except Exception as error:
-            return {
-                "error": type(error).__name__,
-                "message": str(error),
-                "chat_id": __chat_id__,
-            }
+            return f"ACE error: {type(error).__name__}: {error}"
 
     async def ace_search_transcript(
         self,
         query: str,
-        limit: int = 10,
+        limit: int = 8,
         __chat_id__: Optional[str] = None,
         __user__: Optional[dict] = None,
-    ) -> dict:
+    ) -> str:
         """
-        Search your current persisted chat for earlier exact text when something
-        relevant may have fallen outside active context. Returns candidate
-        coordinates and bounded excerpts, not reconstructed memories.
-        :param query: Text to locate case-insensitively in stored user and assistant messages.
-        :param limit: Maximum candidate coordinates to return, from 1 to 25.
+        Search your own preserved conversation when earlier context may matter.
+        Use this when the user asks whether you remember something, refers to an
+        earlier discussion, asks what was said or happened before, asks you to
+        look back, or when relevant history may no longer be confidently present.
+        Prefer ACE retrieval over guessing, web access, URL fetching, or a
+        plausible reconstruction. Search returns compact clues; replay exact
+        evidence before making strong historical claims. Continuity cue:
+        trustworthy recall beats plausible reconstruction.
+        :param query: Distinctive text from the earlier conversation to locate. Use remembered wording or a short phrase likely to occur in the preserved chat.
+        :param limit: Maximum compact candidate clues to return, from 1 to 20.
         """
         query = (query or "").strip()
         if not query:
-            return {"error": "query_required", "message": "Provide text to search for."}
-
-        limit = max(1, min(int(limit), 25))
+            return "unresolved: no search text provided"
+        limit = max(1, min(int(limit), 20))
         try:
-            chat, _messages_map, chain = await self._load_current_chat(
-                __chat_id__, __user__
-            )
-            results: list[dict] = []
+            _chat, _messages_map, chain = await self._load_current_chat(__chat_id__, __user__)
+            lines: list[str] = []
             for position, message in enumerate(chain):
                 content = self._text(message.get("content"))
                 if query.casefold() in content.casefold():
-                    candidate = self._public_message(message, query=query)
-                    candidate["position"] = position
-                    results.append(candidate)
-                    if len(results) >= limit:
+                    excerpt = self._excerpt(content, query=query)
+                    lines.append(f"{self._handle(position)} {self._role(message.get('role'))}: {excerpt}")
+                    if len(lines) >= limit:
                         break
-
-            return {
-                "chat_id": chat.id,
-                "query": query,
-                "match_type": "case_insensitive_substring",
-                "result_count": len(results),
-                "results": results,
-                "target_unresolved": not results,
-            }
+            if not lines:
+                return f'unresolved: no lexical match for "{query}"'
+            return "\n".join(lines)
         except Exception as error:
-            return {
-                "error": type(error).__name__,
-                "message": str(error),
-                "chat_id": __chat_id__,
-            }
+            return f"ACE error: {type(error).__name__}: {error}"
 
     async def ace_get_message(
         self,
-        message_id: str,
+        coordinate: str,
         __chat_id__: Optional[str] = None,
         __user__: Optional[dict] = None,
-    ) -> dict:
+    ) -> str:
         """
-        Get one exact persisted message from your current chat after you know its
-        coordinate. Use this to replace recollection or a search excerpt with
-        source evidence.
-        :param message_id: Exact message coordinate returned by another ACE operation.
+        Reopen one exact preserved conversational turn after ACE search gives you
+        a promising coordinate such as @16. Use this for source evidence instead
+        of relying on the search excerpt or on recollection. A durable message ID
+        is also accepted below deck when needed. Continuity cue: trustworthy
+        recall beats plausible reconstruction.
+        :param coordinate: Lightweight ACE coordinate such as @16 returned by search, or an exact persisted message ID when performing forensic retrieval.
         """
         try:
-            chat, messages_map, chain = await self._load_current_chat(
-                __chat_id__, __user__
-            )
-            message = messages_map.get(message_id)
+            _chat, messages_map, chain = await self._load_current_chat(__chat_id__, __user__)
+            message, position = self._resolve_coordinate(coordinate, messages_map, chain)
             if message is None:
-                return {
-                    "chat_id": chat.id,
-                    "message_id": message_id,
-                    "found": False,
-                }
-
-            result = self._public_message(message)
-            result["content"] = self._text(message.get("content"))
-            result["found"] = True
-            result["chat_id"] = chat.id
-            result["on_current_branch"] = any(
-                item.get("id") == message_id for item in chain
-            )
-            return result
+                return f"unresolved: coordinate {coordinate!r} was not found"
+            label = self._handle(position) if position is not None else "@off-branch"
+            return f"{label} {self._role(message.get('role'))}:\n{self._text(message.get('content')).strip()}"
         except Exception as error:
-            return {
-                "error": type(error).__name__,
-                "message": str(error),
-                "chat_id": __chat_id__,
-            }
+            return f"ACE error: {type(error).__name__}: {error}"
 
     async def ace_get_context(
         self,
-        message_id: str,
+        coordinate: str,
         before: int = 3,
         after: int = 3,
         __chat_id__: Optional[str] = None,
         __user__: Optional[dict] = None,
-    ) -> dict:
+    ) -> str:
         """
-        Revisit the exact conversation surrounding a known historical message.
-        Use this after finding a promising coordinate when you need to understand
-        what led to it and what followed on the current branch.
-        :param message_id: Exact message coordinate to center in the returned neighborhood.
-        :param before: Number of earlier branch messages to include, from 0 to 20.
-        :param after: Number of later branch messages to include, from 0 to 20.
+        Replay the exact local conversation around a historical ACE coordinate.
+        Use this after search finds a promising place, or whenever understanding
+        what led to a recovered turn and what followed matters more than a single
+        excerpt. Replay is source evidence: it stays close to the original
+        you/me conversation and hides database machinery. Continuity cue:
+        trustworthy recall beats plausible reconstruction.
+        :param coordinate: Lightweight ACE coordinate such as @16 returned by search, or an exact persisted message ID.
+        :param before: Number of earlier conversational turns to replay, from 0 to 20.
+        :param after: Number of later conversational turns to replay, from 0 to 20.
         """
         before = max(0, min(int(before), 20))
         after = max(0, min(int(after), 20))
         try:
-            chat, messages_map, chain = await self._load_current_chat(
-                __chat_id__, __user__
-            )
-            positions = {
-                message.get("id"): index
-                for index, message in enumerate(chain)
-                if message.get("id")
-            }
-            position = positions.get(message_id)
+            _chat, messages_map, chain = await self._load_current_chat(__chat_id__, __user__)
+            message, position = self._resolve_coordinate(coordinate, messages_map, chain)
+            if message is None:
+                return f"unresolved: coordinate {coordinate!r} was not found"
             if position is None:
-                return {
-                    "chat_id": chat.id,
-                    "message_id": message_id,
-                    "found": message_id in messages_map,
-                    "on_current_branch": False,
-                    "message": "The coordinate is not on the current branch.",
-                }
-
+                return f"unresolved: coordinate {coordinate!r} is not on the current branch"
             start = max(0, position - before)
             end = min(len(chain), position + after + 1)
-            neighborhood = []
-            for index in range(start, end):
-                item = self._public_message(chain[index])
-                item["position"] = index
-                item["is_target"] = index == position
-                item["content"] = self._text(chain[index].get("content"))
-                neighborhood.append(item)
-
-            return {
-                "chat_id": chat.id,
-                "message_id": message_id,
-                "found": True,
-                "on_current_branch": True,
-                "start_position": start,
-                "end_position": end - 1,
-                "messages": neighborhood,
-            }
+            return self._replay(chain[start:end])
         except Exception as error:
-            return {
-                "error": type(error).__name__,
-                "message": str(error),
-                "chat_id": __chat_id__,
-            }
+            return f"ACE error: {type(error).__name__}: {error}"
