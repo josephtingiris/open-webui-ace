@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- Rebuild the README front door around the ordered promise: extend context, enhance capabilities, and do so economically.
+- Define ACE as the project, an ACE as one Agent Continuity Engine, and this repository as the Open WebUI ACE.
+- Clarify that Open WebUI owns saved conversations while the Open WebUI ACE selectively finds and replays earlier messages.
+- Reframe the architecture around a host-owned continuity substrate with multiple possible historical planes.
+- Record economic design as a measurable objective rather than an unqualified cost claim.
+- Add ADR-0012 and ADR-0013.
+
 ## 0.3.1
 
 ### Changed
