@@ -1,50 +1,84 @@
 # Open WebUI Agent Continuity Engine (ACE)
 
-The Open WebUI Agent Continuity Engine (ACE) is an experimental continuity capability for agents operating through Open WebUI.
+The Open WebUI Agent Continuity Engine (ACE) gives an agent a way to search and replay exact evidence from its persisted current-chat history when relevant conversation is no longer confidently present in active context.
 
-ACE is intended to let an agent retrieve relevant portions of its own authoritative session transcript beyond the active context window. Retrieval is controlled by the agent and scoped to the session that invoked it.
+> Trustworthy recall beats plausible reconstruction.
+
+## What ACE Does Today
+
+ACE 0.2.0 has been exercised live in Open WebUI. The current implementation can:
+
+- bind retrieval to the invoking chat using Open WebUI-injected context;
+- inspect continuity coverage and diagnostics;
+- search the persisted current branch using case-insensitive lexical matching;
+- return compact local coordinates such as `@13`;
+- reopen one exact persisted message;
+- replay a bounded neighborhood around a recovered coordinate;
+- keep database identifiers, parent links, timestamps, and other machinery below deck during normal retrieval.
+
+The first live participant, Moss, used ACE to choose a moment from earlier conversation, search for it, replay its neighborhood, and reason forward from the recovered evidence.
 
 ## Why ACE Exists
 
-A conversation may continue longer than a model's active context window. When earlier turns leave that window, useful decisions, distinctions, corrections, and unfinished work may become unavailable to the agent even though the conversation still exists.
+A conversation can outgrow the model context that is useful at a given moment while its transcript remains persisted. ACE separates what must be carried now from what can remain reachable.
 
-This often makes the human collaborator responsible for repeatedly restoring context.
+The working principle is:
 
-ACE investigates a different approach:
+> Preserve richly below deck. Surface minimally above deck.
 
-1. Preserve the session transcript as authoritative evidence.
-2. Let the agent search that transcript when earlier context may matter.
-3. Return exact messages and surrounding context rather than relying only on summaries.
-4. Keep retrieval isolated to the invoking session by default.
+ACE does not require every historical message to remain in active context. It provides instruments for finding an old X, replaying the nearby path, re-centering, and continuing.
 
-The initial implementation will focus on exact transcript retrieval. Semantic retrieval may be added later as a navigational aid, but it must remain traceable to the source transcript.
+## Current Tool Surface
 
-## Initial Scope
+```text
+ace_check_context
+ace_get_chat
+ace_search_transcript
+ace_get_message
+ace_get_context
+```
 
-ACE will begin with a narrow Open WebUI implementation:
+Public tool names describe agent intentions. Implementation mechanisms remain private.
 
-- agent-controlled retrieval;
-- current-session scope;
-- lexical transcript search;
-- exact message retrieval;
-- surrounding-message retrieval;
+## Evidence Model
+
+The persisted Open WebUI transcript is authoritative evidence for what occurred in the chat. Search results are navigational clues, not historical truth claims. Exact message retrieval and replay return source evidence.
+
+ACE distinguishes:
+
+```text
+search      where should I look?
+replay      what actually happened here?
+inference   what might this evidence mean?
+```
+
+A plausible reconstruction is not recovered evidence. An unresolved search is a legitimate result.
+
+## Fidelity
+
+Search previews may normalize text because they are derived navigational aids. Exact message retrieval and replay are evidence paths and should preserve persisted content without accidental rewriting. A known 0.2.0 defect removes leading and trailing whitespace during exact replay; 0.2.1 is intended to correct that behavior.
+
+## Scope
+
+Current scope is deliberately narrow:
+
+- current chat;
+- current branch;
+- lexical search;
+- exact source recovery;
+- bounded replay;
 - no automatic historical prompt injection;
-- no global or cross-session memory;
-- no identity or sameness claims.
+- no cross-chat continuity;
+- no ARC generation;
+- no identity or sameness claim.
 
-The first objective is simple:
-
-> Give one Open WebUI agent a reliable way to search its own logbook.
+Semantic and relational retrieval are future candidates. They must remain traceable to exact transcript evidence.
 
 ## Project Context
 
-ACE is a practical implementation developed under the Infinite Continuity Experiment (ICE).
+ACE is being developed under the Infinite Continuity Experiment (ICE). An Agent Recovery Core (ARC) is a separate recoverable continuity asset associated with an agent lineage and version. ACE may eventually participate in ARC workflows, but ARC generation is outside the current implementation.
 
-ICE investigates continuity across finite context boundaries, interruptions, and successive sessions. ACE addresses the live-session portion of that larger problem.
-
-An Agent Recovery Core (ARC) is a separate concept within ICE. An ARC is a recoverable continuity asset associated with a particular agent lineage and version. ACE may eventually help create or use ARCs, but ARC generation is outside the initial ACE implementation.
-
-The governing distinctions include:
+The governing distinctions remain:
 
 ```text
 agent != ARC
@@ -53,12 +87,18 @@ continuity != identity
 inheritance != sameness
 ```
 
-The governing principle is:
+The deeper principle is:
 
 > Continuity without requiring sameness.
 
+## Documentation
+
+- `README.md` — what ACE is and what works now.
+- `AGENTS.md` — invariants and working rules for agents modifying ACE.
+- `CHANGELOG.md` — what changed between versions.
+- `docs/ARCHITECTURE.md` — how ACE fits together now.
+- `docs/ADR/` — why consequential architectural decisions were made.
+
 ## Status
 
-Experimental. Zero Day.
-
-The architecture, Open WebUI integration points, and security boundaries are currently being defined. No working release is available yet.
+Experimental. Zero Day. ACE 0.2.0 is a working exact-retrieval and replay prototype.
