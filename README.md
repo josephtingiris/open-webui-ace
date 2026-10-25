@@ -1,34 +1,56 @@
 # Open WebUI Agent Continuity Engine (ACE)
 
-The Open WebUI Agent Continuity Engine (ACE) gives an agent a way to search and replay exact evidence from its persisted current-chat history when relevant conversation is no longer confidently present in active context.
+ACE gives an agent and a human peer a small set of instruments for finding and replaying preserved evidence from the current Open WebUI conversation when relevant history is no longer confidently present in active context.
 
 > Trustworthy recall beats plausible reconstruction.
 
-## What ACE Does Today
+## Current Release
 
-ACE 0.2.0 has been exercised live in Open WebUI. The current implementation can:
+ACE 0.3.0 is the temporal-positioning generation. It adds canonical historical-turn presentation, sacred source-time handling, temporal find bounds, a first per-user presentation valve, and cheap trajectory-integrity findings.
 
-- bind retrieval to the invoking chat using Open WebUI-injected context;
-- inspect continuity coverage and diagnostics;
-- search the persisted current branch using case-insensitive lexical matching;
-- return compact local coordinates such as `@13`;
-- reopen one exact persisted message;
-- replay a bounded neighborhood around a recovered coordinate;
-- keep database identifiers, parent links, timestamps, and other machinery below deck during normal retrieval.
+## Core Invariants
 
-The first live participant, Moss, used ACE to choose a moment from earlier conversation, search for it, replay its neighborhood, and reason forward from the recovered evidence.
+1. The persisted Open WebUI transcript is authoritative evidence for what occurred.
+2. Normal scope comes from trusted Open WebUI-injected current-chat context.
+3. Derived indexes, summaries, excerpts, embeddings, and relationships are navigation aids, not replacements for evidence.
+4. Plausible reconstruction is not recovered evidence; unresolved is legitimate.
+5. ACE may project evidence for navigation. ACE may not mutate evidence to satisfy an invariant.
+6. Persisted source content is sacred on exact-message and replay paths.
+7. Persisted source timestamps are sacred. ACE may convert their visible timezone representation but must never synthesize, interpolate, correct, or rewrite historical time.
+8. Source topology orders replay. Timestamp disagreement is an integrity finding, never permission to reorder history.
+9. ACE coordinates such as `@60` are navigation coordinates. Once a durable lineage mapping is introduced, assigned coordinates must never be rebound or reused.
+10. Continuity, recovery, inheritance, and retrieval do not establish identity or sameness.
+11. Cross-chat retrieval requires a separately designed authorization boundary.
+12. Prefer simple deterministic machines and platform-native interfaces; add infrastructure only when measurement earns it.
 
-## Why ACE Exists
+## Canonical Historical Turn
 
-A conversation can outgrow the model context that is useful at a given moment while its transcript remains persisted. ACE separates what must be carried now from what can remain reachable.
+ACE 0.3 uses one grammar wherever a historical turn is surfaced:
 
-The working principle is:
+```text
+@<where> · <when> · <who>:
+<what>
+```
 
-> Preserve richly below deck. Surface minimally above deck.
+Example:
 
-ACE does not require every historical message to remain in active context. It provides instruments for finding an old X, replaying the nearby path, re-centering, and continuing.
+```text
+@60 · Oct 25, 9:13 AM EDT · you:
+persisted message content
+```
 
-## Current Tool Surface
+- **where**: ACE navigation coordinate.
+- **when**: human-oriented projection of the persisted source instant into the current navigator timezone.
+- **who**: `user -> you`, `assistant -> me`; other stored roles remain literal.
+- **what**: source content. Exact-message and replay paths do not rewrite it.
+
+The timestamp displayed by ACE is a representation of the recorded source instant, not a replacement timestamp.
+
+## Finding and Replay
+
+Architecturally, ACE **finds** an X, resolves its coordinate, then replays source evidence.
+
+The current public surface remains intentionally stable:
 
 ```text
 ace_check_context
@@ -38,47 +60,74 @@ ace_get_message
 ace_get_context
 ```
 
-Public tool names describe agent intentions. Implementation mechanisms remain private.
+`ace_search_transcript` performs lexical find, temporal find, or both. It keeps its established public name for compatibility.
 
-## Evidence Model
+Temporal bounds are absolute source timestamps and use `[after, before)` semantics: inclusive lower bound, exclusive upper bound.
 
-The persisted Open WebUI transcript is authoritative evidence for what occurred in the chat. Search results are navigational clues, not historical truth claims. Exact message retrieval and replay return source evidence.
+Independent find results default to oldest-first. A per-user `find_order` valve can select newest-first. The valve affects only independent result presentation; it cannot reorder source replay or alter evidence.
 
-ACE distinguishes:
+## Evidence Fidelity
+
+Navigation excerpts may normalize whitespace because they are clues. Exact-message retrieval and replay return persisted content without ACE calling `strip()`, collapsing whitespace, cleaning Markdown, changing Unicode, or otherwise rewriting the evidence.
+
+ACE can preserve only what Open WebUI exposes to it. Do not claim origin or completeness that the source cannot establish.
+
+## Time
+
+ACE carries recorded time; it does not create historical time.
+
+Display timezone resolution is:
 
 ```text
-search      where should I look?
-replay      what actually happened here?
-inference   what might this evidence mean?
+browser timezone
+-> user-profile timezone
+-> explicit UTC fallback
 ```
 
-A plausible reconstruction is not recovered evidence. An unresolved search is a legitimate result.
+Temporal comparisons operate on source timestamps, never on rendered strings.
 
-## Fidelity
+## Integrity
 
-Search previews may normalize text because they are derived navigational aids. Exact message retrieval and replay are evidence paths and should preserve persisted content without accidental rewriting. A known 0.2.0 defect removes leading and trailing whitespace during exact replay; 0.2.1 is intended to correct that behavior.
+Integrity detection is extensible and independent from repair. ACE 0.3 starts with cheap findings for:
 
-## Scope
+- missing source timestamps;
+- non-monotonic source time along the reconstructed trajectory;
+- unexpected repeated `user` or repeated `assistant` roles in the conversational projection.
 
-Current scope is deliberately narrow:
+A finding means something deserves attention. It does not by itself establish corruption, cause, or severity. ACE surfaces anomalies and does not silently repair sacred records.
 
-- current chat;
-- current branch;
-- lexical search;
-- exact source recovery;
-- bounded replay;
-- no automatic historical prompt injection;
-- no cross-chat continuity;
-- no ARC generation;
-- no identity or sameness claim.
+Execution/tool-call integrity is an explicit extension point. Execution evidence should be recoverable when the user's historical intent concerns commands or tools and when Open WebUI preserved that evidence; missing expected execution evidence must not be reconstructed.
 
-Semantic and relational retrieval are future candidates. They must remain traceable to exact transcript evidence.
+## Public Tool Semantics
+
+Public methods name agent intentions using `ace_<action>_<object>`. Names, docstrings, and parameter descriptions are part of the learned interface. Spend them carefully.
+
+When historical context matters and is not confidently present, find/replay evidence before reconstructing.
+
+## Quarterdeck / Engine Room
+
+Above deck, favor coordinates, local time, roles, pristine evidence, and calm integrity notices.
+
+Below deck, retain UUIDs, parent links, source timestamps, branch topology, execution structures, retrieval metadata, and provenance needed to establish those views.
+
+## Observability
+
+Operational seams are separate and should be independently observable:
+
+- artifact version/digest;
+- repository revision;
+- Open WebUI registration metadata;
+- model-visible tool schema;
+- runtime ACE version/contracts;
+- timezone projection source;
+- retrieval success/unresolved state;
+- trajectory-integrity findings.
+
+During Zero Day/beta the tool-level description carries the ACE version for a quick human integration-screen check. `ace_check_context` remains runtime truth.
 
 ## Project Context
 
-ACE is being developed under the Infinite Continuity Experiment (ICE). An Agent Recovery Core (ARC) is a separate recoverable continuity asset associated with an agent lineage and version. ACE may eventually participate in ARC workflows, but ARC generation is outside the current implementation.
-
-The governing distinctions remain:
+ACE is developed under the Infinite Continuity Experiment (ICE). An Agent Recovery Core (ARC) is a separate recoverable continuity asset associated with an agent lineage/version. ACE may eventually participate in ARC workflows, but ARC generation remains outside the current implementation.
 
 ```text
 agent != ARC
@@ -87,18 +136,29 @@ continuity != identity
 inheritance != sameness
 ```
 
-The deeper principle is:
-
 > Continuity without requiring sameness.
+
+## Collaboration
+
+Work from observed evidence. Distinguish observed behavior, documented platform behavior, accepted decisions, working hypotheses, and future possibilities.
+
+For durable work:
+
+```text
+propose / build -> inspect -> commit -> observe -> continue
+```
+
+Deployment remains an explicit operational gate. For handoffs, use versioned filenames and SHA-256 digests.
 
 ## Documentation
 
-- `README.md` — what ACE is and what works now.
-- `AGENTS.md` — invariants and working rules for agents modifying ACE.
-- `CHANGELOG.md` — what changed between versions.
-- `docs/ARCHITECTURE.md` — how ACE fits together now.
-- `docs/ADR/` — why consequential architectural decisions were made.
+- `README.md`: common front door and shared project specification for humans and agents.
+- `CHANGELOG.md`: what changed by version.
+- `docs/ARCHITECTURE.md`: deeper current architecture.
+- `docs/ADR/`: durable reasons for consequential decisions.
+
+There is intentionally no separate agent specification.
 
 ## Status
 
-Experimental. Zero Day. ACE 0.2.0 is a working exact-retrieval and replay prototype.
+Experimental. Zero Day. ACE 0.3.0 is ready for live qualification; behavior not yet observed live should not be described as proven.

@@ -1,58 +1,53 @@
 # Changelog
 
-All notable ACE changes are recorded here. This file describes what changed; architecture decision records explain why.
+All notable ACE changes are recorded here. ADRs explain consequential architectural decisions.
 
-## Unreleased
+## 0.3.0
+
+### Added
+
+- Canonical historical-turn grammar: `@where · when · who: what`.
+- Human-oriented local timestamp presentation derived from persisted source time.
+- Browser timezone -> profile timezone -> UTC fallback projection.
+- Optional `[after, before)` source-time bounds on `ace_search_transcript` for temporal find.
+- `find_order` UserValve with `oldest_first` default and `newest_first` alternative for independent find results.
+- Cheap temporal and conversational integrity findings.
+- Historical-turn and coordinate contract identifiers in runtime diagnostics.
+- Visible `ACE 0.3.0` marker in tool-level description during Zero Day/beta.
+- ADR-0009 and ADR-0010.
+
+### Changed
+
+- Search/find, exact-message, and replay surfaces use the same turn header.
+- Replay preserves source trajectory order while time is checked independently for anomalies.
+- README is the common human/agent project specification; AGENTS.md is retired.
+- Architectural vocabulary prefers `find` for locating an X while the existing public `ace_search_transcript` name remains stable.
+
+### Integrity
+
+- ACE reports missing source timestamps and non-monotonic trajectory time rather than manufacturing or correcting history.
+- Repeated conversational roles are surfaced as cheap diagnostic findings, not automatic proof of corruption.
+
+### Preserved
+
+- Exact-message and replay content remains pristine as established by 0.2.1.
+- Current-chat trusted scope and access-control boundary remain unchanged.
+
+## 0.2.1
 
 ### Fixed
 
-- Preserve leading and trailing whitespace in exact message retrieval and replay. This is planned for the 0.2.x line and corrects a fidelity defect found during 0.2.0 review.
-
-### Operational
-
-- Use versioned downloadable artifact names and SHA-256 digests for full-generation handoffs.
-- Make runtime version, semantic contract, and tool-schema freshness observable at separate boundaries.
+- Preserve leading and trailing whitespace in exact message retrieval and replay.
 
 ## 0.2.0
 
 ### Added
 
-- Compact `@position` coordinates for normal agent navigation.
-- Conversational replay labels: persisted `user` is surfaced as `you`; persisted `assistant` is surfaced as `me`.
-- Runtime version, semantic-contract, and semantic-canary diagnostics.
-- Stronger model-visible guidance for natural continuity intents such as remembering, looking back, and recovering earlier conversation.
-- Explicit unresolved results for failed lexical searches and invalid coordinates.
-
-### Changed
-
-- Normal retrieval output was reduced substantially; UUIDs, parent identifiers, timestamps, and branch machinery remain below deck.
-- Context retrieval became replay-shaped output close to the original conversation rather than database-shaped JSON.
-- `ace_get_chat` became a compact continuity-coverage diagnostic rather than a transcript dump.
-- Tool guidance explicitly prefers ACE retrieval over guessing, URL fetching, and plausible reconstruction for current-chat historical evidence.
-
-### Observed
-
-- Moss, ACE Patient Zero, autonomously selected a historical event, used lexical search to locate a compact coordinate, replayed its neighborhood, and reasoned forward from recovered evidence.
-- Installation testing showed that runtime source, tool registration metadata, model-visible schema, and artifact identity are separate operational seams worth observing.
-
-### Known issue
-
-- Exact-message and replay paths call `strip()` in 0.2.0, which can alter leading or trailing whitespace. Search normalization is intentional; evidence mutation is not.
+- Compact `@position` navigation coordinates.
+- Conversational `you` / `me` role projection.
+- Runtime contract and semantic-canary diagnostics.
+- Explicit unresolved lexical results.
 
 ## 0.1.0
 
-### Added
-
-- First working ACE Workspace Tool.
-- Trusted current-chat binding through Open WebUI-injected context.
-- Access-controlled persisted-chat loading through Open WebUI application interfaces.
-- Case-insensitive substring search.
-- Exact-message retrieval and bounded surrounding-context retrieval.
-- `ace_check_context` diagnostic surface.
-
-### Observed
-
-- Workspace Tool invocation received a nonempty trusted chat identifier.
-- Persisted transcript search successfully returned exact historical coordinates and excerpts.
-- Returned coordinates successfully reopened exact messages and surrounding neighborhoods.
-- Early model tool selection sometimes substituted generic `fetch_url` for retrieval-oriented ACE tools, motivating stronger semantic guidance in 0.2.0.
+- First working trusted current-chat lexical retrieval and bounded replay prototype.

@@ -2,189 +2,165 @@
 
 ## Purpose
 
-The Open WebUI Agent Continuity Engine (ACE) lets an agent locate and replay exact evidence from its persisted current-chat trajectory when relevant history is no longer confidently present in active context.
+ACE lets a navigator find and replay exact evidence from a persisted Open WebUI conversation when relevant history is no longer confidently present in active context.
 
-This document describes the architecture as it exists now. `docs/ADR/` records why consequential decisions were made.
+`README.md` is the shared project specification. This document describes the deeper architecture. `docs/ADR/` records why consequential choices were made.
 
 ## North Star
 
 ```text
-agent reasoning
+navigator intent
     stochastic, interpretive, selective
             |
             v
 ACE quarterdeck
-    semantic tool surface
-    economical search and replay
+    find + coordinate + canonical historical turns
             |
             v
 ACE engine room
-    trusted coordinates
-    access control
-    branch reconstruction
-    provenance
-    diagnostics
+    trusted scope + source topology + sacred time
+    pristine content + integrity + provenance
             |
             v
 Open WebUI persisted chat
-    authoritative transcript evidence
+    authoritative source evidence
 ```
 
 > Preserve richly below deck. Surface minimally above deck.
 
-The agent should experience continuity, not database administration.
+## Historical-Turn Contract
 
-## Proven Flow
-
-ACE has demonstrated this live path:
+Normal resolved historical turns use:
 
 ```text
-natural continuity intent
-    -> lexical search
-    -> compact candidate coordinate
-    -> bounded exact replay
-    -> agent interpretation
-    -> optional next cue / traversal
+@<where> · <when> · <who>:
+<what>
 ```
 
-The first live participant, Moss, used this path autonomously during ACE 0.2.0 testing.
+The contract is `turn-v1`.
 
-## Evidence and Navigation
-
-The persisted Open WebUI transcript is authoritative for what occurred in the chat. Derived structures help navigate; they do not become the past.
-
-```text
-search   -> where should I look?
-replay   -> what actually happened here?
-reason   -> what might this evidence mean?
-```
-
-The distinction permits future fuzzy navigation without fuzzy evidence.
-
-## Trusted Scope
-
-Normal retrieval begins with Open WebUI-injected current-chat context and passes through Open WebUI's access-controlled chat interface. The model does not supply the authoritative current-chat coordinate.
-
-Cross-chat retrieval requires an explicit future authorization design.
-
-## Public Tool Surface
-
-Public methods use `ace_<action>_<object>` and describe agent intentions. Private helpers describe implementation mechanisms.
-
-Current surface:
-
-```text
-ace_check_context
-ace_get_chat
-ace_search_transcript
-ace_get_message
-ace_get_context
-```
-
-The tool descriptions themselves are behavioral architecture: they teach when recall should use ACE rather than guessing or generic web retrieval.
+`where` is navigation. `when` and `what` are projections of sacred source fields: time may be represented in another timezone but the source instant is never changed; content is not rewritten on evidence paths. `who` is a conversational projection of the stored role.
 
 ## Coordinates
 
-Durable Open WebUI message IDs remain below deck. ACE 0.2.0 introduced compact local handles such as `@13` for normal navigation.
+ACE 0.3 continues to derive `@N` from current-trajectory position for compatibility with 0.2. This implementation is not yet sufficient to claim permanent lineage durability.
 
-A local handle is intentionally lightweight and must not silently be treated as durable across branch mutation.
+The accepted target contract is stronger: once a coordinate is durably minted within a lineage reference frame, it must never be rebound or reused. Durable mapping persistence and fork/ARC inheritance are intentionally deferred until the storage mechanism is observed and chosen.
 
-## Economical Recall
+Open WebUI message IDs remain below deck as source identifiers.
 
-Search returns compact clues. Replay restores a small exact neighborhood. The normal interface avoids UUIDs, parent links, timestamps, and structural JSON unless those details are requested for diagnostics or provenance.
+## Time Plane
 
-This allows the present to remain small while extending what it can reach.
+Persisted source timestamps are sacred evidence.
 
-## Replay Fidelity
+ACE may:
 
-Normal replay projects storage roles into conversational labels:
+- compare source timestamps;
+- form temporal find windows;
+- project a source instant into the navigator timezone for display;
+- flag a disagreement between source trajectory and source time.
+
+ACE may not synthesize, interpolate, correct, reorder, or replace historical time.
+
+Timezone presentation precedence is browser request timezone, then user-profile timezone, then explicit UTC fallback.
+
+Temporal find bounds use `[after, before)` semantics.
+
+## Find Plane
+
+`find` is the architectural navigation verb. The existing `ace_search_transcript` public tool retains its learned name.
+
+Current find modes:
 
 ```text
-user      -> you
-assistant -> me
+lexical find   text condition over preserved turns
+temporal find  source-time interval condition
+combined find  lexical + temporal constraints
 ```
 
-The labels are navigation aids. The underlying persisted role remains unchanged.
+Future semantic, relational, and execution finds may extend this set. Every successful route should resolve back to canonical historical turns and exact source evidence.
 
-Message content is evidence and must not be rewritten by ACE on exact retrieval or replay paths. Search previews may normalize text because they are derived clues.
+Independent find results are ordered by sacred source time for presentation. The navigator's `find_order` UserValve chooses oldest-first or newest-first. This preference never changes source replay order.
 
-ACE 0.2.0 exposed a fidelity defect: exact-message and replay paths strip leading/trailing whitespace. The 0.2.x line should correct it without changing the retrieval model.
+## Replay Plane
 
-## Retrieval as Traversal
+Replay follows the reconstructed source trajectory, not timestamp sort order. Timestamp monotonicity is checked independently.
 
-A recovered coordinate can become a place from which the agent notices another cue:
+Exact-message and replay content is pristine relative to the persisted content Open WebUI exposes to ACE. Derived find excerpts may normalize whitespace because they are navigational clues.
+
+## Integrity Plane
+
+Integrity detection is observation, not repair.
+
+Initial cheap detectors include:
 
 ```text
-locate
-    -> replay
-    -> reason
-    -> notice a related cue
-    -> locate again
-    -> re-center
+temporal.missing_source_timestamp
+temporal.non_monotonic_trajectory
+conversation.role_sequence
 ```
 
-This suggests future semantic and relational navigation. It does not yet justify a vector or graph implementation. Lexical search remains the current deterministic locator.
+The detector architecture is intentionally extensible toward structural, coordinate, execution, and evidentiary findings.
+
+A finding states what ACE can establish. It does not silently infer cause, severity, or remediation.
+
+Execution history can contain relevant historical evidence. Ordinary replay should not become an execution trace, but execution evidence should be findable when the recall intent concerns commands/tools/APIs and the host preserved that evidence.
+
+## Configuration Plane
+
+Open WebUI UserValves provide navigator-level presentation preferences. ACE 0.3 introduces one:
+
+```text
+find_order = oldest_first | newest_first
+```
+
+The default is `oldest_first`.
+
+Preferences are prohibited from modifying sacred source fields, coordinate bindings, replay topology, or integrity facts.
 
 ## Deterministic Footing, Stochastic Reasoning
 
-ACE does not make thought deterministic. It makes selected footing deterministic where practical:
+ACE makes selected footing deterministic where practical:
 
 ```text
-which build ran
-which chat was bound
-which coordinate was recovered
-which persisted content exists there
-which retrieval method produced a candidate
-whether retrieval succeeded or remained unresolved
+trusted current scope
+source trajectory
+source timestamp
+coordinate resolution
+persisted content
+find constraints
+integrity findings
+resolved / unresolved state
 ```
 
-> Deterministic footing for fluid thought.
+Interpretation remains the navigator's job.
 
 ## Observability
 
-Operational seams are first-class:
+Operational seams remain independent:
 
 ```text
-artifact delivery
-    version + digest
-
-repository
-    revision + history
-
-Open WebUI registration
-    visible integration metadata
-
-model semantic surface
-    tool names + docstrings + parameter descriptions
-
-runtime
-    ACE version + semantic contract + trusted context
-
-retrieval
-    source + method + resolved/unresolved state
+artifact       version + digest
+repository     exact revision
+registration   visible tool metadata
+schema         model-visible names/docstrings/parameters
+runtime        ACE + contract versions + timezone source
+history        find method + resolution + integrity findings
 ```
 
-The 0.2.0 installation exercise demonstrated why these layers must not be assumed identical.
+During beta the tool description carries the ACE release for a quick human check. Runtime diagnostics remain authoritative for the loaded implementation.
 
 ## Dependency Strategy
 
-Start with Python stdlib and Open WebUI application interfaces. Add infrastructure when measurement earns it.
+Prefer Python stdlib and Open WebUI application interfaces. `datetime` and `zoneinfo` provide temporal projection without introducing a new time dependency. System IANA timezone data availability is an environment dependency; UTC is the visible fallback.
 
-Possible future layers include full-text indexes, PostgreSQL, pgvector, embeddings, relational indexes, and distributed retrieval.
-
-## Scale
-
-ICE may try to preserve and retrieve as much earned history as practical for as long as practical. ACE does not assume forgetting is required. Active context can remain finite while reachable history grows.
-
-> Keep the present small while extending what the present can reach.
+Additional database/index/vector infrastructure remains future work that must be earned by measurement.
 
 ## Security
 
-Workspace Tools possess substantial server-side capability. ACE should exercise less privilege than the host technically permits. Current-chat retrieval is scoped from trusted injected context and uses Open WebUI's access-control boundary. Authentication material and broad request/user objects must not be returned through normal tools.
+Normal retrieval remains current-chat scoped from trusted Open WebUI-injected context and the Open WebUI access-controlled chat interface. Model-supplied chat IDs are not authoritative. Cross-chat continuity requires its own authorization design.
 
 ## Decision Records
-
-Consequential decisions are maintained under `docs/ADR/`:
 
 ```text
 0001 authoritative transcript
@@ -195,14 +171,19 @@ Consequential decisions are maintained under `docs/ADR/`:
 0006 observability at boundaries
 0007 platform-native and stdlib first
 0008 pristine evidence replay
+0009 stable historical-turn grammar
+0010 sacred time and trajectory integrity
 ```
 
-When a decision changes, preserve the record and supersede it with a new ADR.
+When a decision changes, preserve history and supersede it with a new ADR.
 
-## Near-Term Work
+## 0.3 Qualification Focus
 
-1. Correct replay fidelity in 0.2.x.
-2. Make version identity easier to inspect operationally.
-3. Test longer-lived agents and histories.
-4. Measure replay-window cost and usefulness.
-5. Observe iterative retracing before choosing semantic or relational indexing.
+1. Canonical header appears consistently across find, exact message, and replay.
+2. Source content survives exact paths byte-for-byte as exposed by Open WebUI.
+3. Same source instant renders correctly in navigator timezone and UTC fallback.
+4. Temporal `[after, before)` boundaries behave deterministically.
+5. Find ordering valve affects independent candidates only.
+6. Replay remains topology-ordered even when timestamps disagree.
+7. Integrity findings are visible and do not mutate evidence.
+8. Model-facing semantics still cause uncertain memory to find/replay rather than reconstruct.
