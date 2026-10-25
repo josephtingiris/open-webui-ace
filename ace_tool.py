@@ -2,7 +2,7 @@
 title: Open WebUI Agent Continuity Engine (ACE)
 author: Joseph Tingiris / Jun
 description: Session-scoped continuity tools for locating and replaying exact evidence from the current Open WebUI chat.
-version: 0.2.0
+version: 0.2.1
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from open_webui.models.users import Users
 from open_webui.utils.misc import get_message_list
 
 
-ACE_VERSION = "0.2.0"
+ACE_VERSION = "0.2.1"
 ACE_CONTRACT = "continuity-v1"
 ACE_CANARY = "trustworthy recall beats plausible reconstruction"
 
@@ -130,7 +130,7 @@ class Tools:
         blocks: list[str] = []
         for message in messages:
             role = Tools._role(message.get("role"))
-            content = Tools._text(message.get("content")).strip()
+            content = Tools._text(message.get("content"))
             blocks.append(f"{role}:\n{content}")
         return "\n\n".join(blocks)
 
@@ -244,7 +244,7 @@ class Tools:
             if message is None:
                 return f"unresolved: coordinate {coordinate!r} was not found"
             label = self._handle(position) if position is not None else "@off-branch"
-            return f"{label} {self._role(message.get('role'))}:\n{self._text(message.get('content')).strip()}"
+            return f"{label} {self._role(message.get('role'))}:\n{self._text(message.get('content'))}"
         except Exception as error:
             return f"ACE error: {type(error).__name__}: {error}"
 
