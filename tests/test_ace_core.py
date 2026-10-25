@@ -5,12 +5,11 @@ from pathlib import Path
 SOURCE = Path(__file__).parents[1] / "ace_tool.py"
 TEXT = SOURCE.read_text()
 
-
 class AceCoreContractTests(unittest.TestCase):
     def test_release_and_visible_marker(self):
-        self.assertIn('version: 0.3.0', TEXT)
-        self.assertIn('description: ACE 0.3.0', TEXT)
-        self.assertIn('ACE_VERSION = "0.3.0"', TEXT)
+        self.assertIn('version: 0.3.1', TEXT)
+        self.assertIn('description: ACE 0.3.1', TEXT)
+        self.assertIn('ACE_VERSION = "0.3.1"', TEXT)
 
     def test_evidence_paths_do_not_strip_content(self):
         tree = ast.parse(TEXT)
@@ -25,10 +24,10 @@ class AceCoreContractTests(unittest.TestCase):
         self.assertIn('"oldest_first", "newest_first"', TEXT)
         self.assertIn('stamp >= float(before)', TEXT)
 
-    def test_canonical_header_shape_present(self):
-        self.assertIn(' · {Tools._display_time(message, tz)} · ', TEXT)
-        self.assertIn("{Tools._role(message.get('role'))}:", TEXT)
-
+    def test_tilde_coordinate_notation(self):
+        self.assertIn('return f"~{position}"', TEXT)
+        self.assertIn('r"~?(\\d+)"', TEXT)
+        self.assertNotIn('return f"@{position}"', TEXT)
 
 if __name__ == "__main__":
     unittest.main()

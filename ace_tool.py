@@ -1,8 +1,8 @@
 """
 title: Open WebUI Agent Continuity Engine (ACE)
 author: Joseph Tingiris / Jun
-description: ACE 0.3.0 · Continuity tools for finding and replaying preserved evidence from the current Open WebUI chat.
-version: 0.3.0
+description: ACE 0.3.1 · Continuity tools for finding and replaying preserved evidence from the current Open WebUI chat.
+version: 0.3.1
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from open_webui.models.users import Users
 from open_webui.utils.misc import get_message_list
 
 
-ACE_VERSION = "0.3.0"
+ACE_VERSION = "0.3.1"
 ACE_CONTRACT = "continuity-v1"
 ACE_TURN_CONTRACT = "turn-v1"
 ACE_COORDINATE_CONTRACT = "trajectory-v1"
@@ -80,7 +80,7 @@ class Tools:
 
     @staticmethod
     def _handle(position: int) -> str:
-        return f"@{position}"
+        return f"~{position}"
 
     @staticmethod
     def _source_timestamp(message: dict) -> Optional[float]:
@@ -150,7 +150,7 @@ class Tools:
 
     @staticmethod
     def _position_from_handle(handle: str) -> Optional[int]:
-        match = re.fullmatch(r"@?(\d+)", (handle or "").strip())
+        match = re.fullmatch(r"~?(\d+)", (handle or "").strip())
         return int(match.group(1)) if match else None
 
     async def _load_current_chat(
@@ -189,7 +189,7 @@ class Tools:
         messages_map: dict[str, dict],
         chain: list[dict],
     ) -> tuple[Optional[dict], Optional[int]]:
-        """Resolve a lightweight @position or durable UUID below deck."""
+        """Resolve a lightweight ~position or durable UUID below deck."""
         position = Tools._position_from_handle(coordinate)
         if position is not None:
             if 0 <= position < len(chain):
@@ -338,7 +338,7 @@ class Tools:
         """
         Reopen one exact preserved historical turn at an ACE coordinate. Use this
         to establish source evidence after a find rather than relying on an excerpt.
-        :param coordinate: ACE coordinate such as @16, or an exact persisted ID for forensic retrieval.
+        :param coordinate: ACE coordinate such as ~16, or an exact persisted ID for forensic retrieval.
         """
         try:
             _chat, messages_map, chain = await self._load_current_chat(__chat_id__, __user__)
@@ -365,7 +365,7 @@ class Tools:
         Replay the exact source trajectory around a historical ACE coordinate.
         Replay preserves topology order and pristine persisted content; display
         time is projected only for navigation.
-        :param coordinate: ACE coordinate such as @16, or an exact persisted message ID.
+        :param coordinate: ACE coordinate such as ~16, or an exact persisted message ID.
         :param before: Number of earlier turns to replay, from 0 to 20.
         :param after: Number of later turns to replay, from 0 to 20.
         """
